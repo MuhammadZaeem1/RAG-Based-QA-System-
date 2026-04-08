@@ -5,9 +5,9 @@ from typing import Optional
 
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.chains import RetrievalQA
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
@@ -72,17 +72,32 @@ def get_llm() -> ChatGroq:
 
 
 def answer_question(vector_store: FAISS, question: str) -> dict:
-    """Run retrieval + generation and return result with source docs."""
+    """Run retrieval + generation and return answer with retrieved context."""
     llm = get_llm()
 
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=vector_store.as_retriever(search_kwargs={"k": 4}),
-        return_source_documents=True,
+    retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+    retrieved_docs = retriever.invoke(question)
+
+    context_text = "\n\n".join(
+        [
+            f"[Source: {doc.metadata.get('source', 'Unknown source')} | Page: {doc.metadata.get('page', 'N/A')}]\n{doc.page_content}"
+            for doc in retrieved_docs
+        ]
     )
 
-    return qa_chain.invoke({"query": question})
+    prompt = ChatPromptTemplate.from_template(
+        "You are a helpful assistant. Use only the provided context to answer the question.\n\n"
+        "Context:\n{context}\n\n"
+        "Question: {question}\n"
+        "If the answer is not present in context, say you do not know."
+    )
+    chain = prompt | llm
+    response = chain.invoke({"context": context_text, "question": question})
+
+    return {
+        "answer": response.content if hasattr(response, "content") else str(response),
+        "context": retrieved_docs,
+    }
 
 
 def save_uploaded_pdf(uploaded_file) -> Path:
@@ -135,13 +150,13 @@ def main() -> None:
                 result = answer_question(vector_store, question)
 
             st.subheader("Answer")
-            st.write(result["result"])
+            st.write(result["answer"])
 
             st.subheader("Retrieved Context")
-            for idx, doc in enumerate(result.get("source_documents", []), start=1):
+            for idx, doc in enumerate(result.get("context", []), start=1):
                 source = doc.metadata.get("source", "Unknown source")
                 page = doc.metadata.get("page", "N/A")
-                st.markdown(f"**Chunk {idx}** | Source: `{source}` | Page: `{page}`")
+                st.markdown(f"**Chunk {idx}** | Source: {source} | Page: {page}")
                 st.write(doc.page_content[:500] + ("..." if len(doc.page_content) > 500 else ""))
         except Exception as exc:
             st.error(f"Error: {exc}")

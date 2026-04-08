@@ -1,0 +1,11 @@
+Question: How many days per week must employees be physically present in the office under the Hybrid-Flex model?
+Answer: Employees must be in the office at least 3 days per week.
+
+Question: Which days are mandatory Core Collaboration Days?
+Answer: Tuesday and Wednesday are mandatory Core Collaboration Days for all departments.
+
+Question: What are the rules for remote access to Project Zodiac?
+Answer: Remote access to the Zodiac codebase is only allowed via the SecurLink VPN using a hardware security key.
+
+Question: What is the deadline for submitting travel expense reimbursement?
+Answer: All travel expenses must be submitted via the Expensify-Nova portal within 14 days of the transaction.
