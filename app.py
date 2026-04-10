@@ -6,8 +6,11 @@ from typing import Optional
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
@@ -58,6 +61,13 @@ def load_vector_store() -> Optional[FAISS]:
     )
 
 
+def build_rerank_retriever(vector_store: FAISS) -> ContextualCompressionRetriever:
+    base_retriever = vector_store.as_retriever(search_kwargs={"k": 20})
+    cross_encoder = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
+    compressor = CrossEncoderReranker(model=cross_encoder, top_n=5)
+    return ContextualCompressionRetriever(base_retriever=base_retriever, base_compressor=compressor)
+
+
 def get_llm() -> ChatGroq:
     """Initialize the LLM used for answer generation."""
     api_key = os.getenv("GROQ_API_KEY")
@@ -75,7 +85,7 @@ def answer_question(vector_store: FAISS, question: str) -> dict:
     """Run retrieval + generation and return answer with retrieved context."""
     llm = get_llm()
 
-    retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+    retriever = build_rerank_retriever(vector_store)
     retrieved_docs = retriever.invoke(question)
 
     context_text = "\n\n".join(
